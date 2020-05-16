@@ -1,0 +1,36 @@
+{
+	"name": "sof3/pathetique",
+	"description": "Object-oriented path manipulation",
+	"type": "library",
+	"readme": "README.md",
+	"license": "Apache-2.0",
+	"version": "0.1.0",
+	"authors": [
+		{
+			"name": "SOFe",
+			"email": "sofe2038@gmail.com"
+		}
+	],
+	"autoload": {
+		"psr-4": {
+			"SOFe\\Pathetique\\": "src"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"SOFe\\Pathetique\\": "tests"
+		}
+	},
+	"require": {
+		"php": "^7.2"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9.1",
+		"phpstan/phpstan": "^0.12.25"
+	},
+	"scripts": {
+		"test": "vendor/bin/phpunit tests",
+		"analyze": "vendor/bin/phpstan analyze",
+		"infection": "vendor/bin/infection -s"
+	}
+}
