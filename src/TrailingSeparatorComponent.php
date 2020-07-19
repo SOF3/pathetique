@@ -5,9 +5,9 @@ declare(strict_types = 1);
 namespace SOFe\Pathetique;
 
 /**
- * A Windows verbatim path prefix using UNC (Uniform Naming Convention), e.g. `\\?\UNC\server\share`.
+ * The trailing directory separator in a path.
  */
-final class VerbatimUncPrefix implements Prefix {
+final class TrailingSeparatorComponent implements Component {
 	public function toString() : string {
 		// TODO unimplemented
 	}

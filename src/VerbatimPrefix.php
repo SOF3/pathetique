@@ -4,29 +4,15 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
-use function strlen;
-
-final class VerbatimPrefix extends Prefix {
-	/** @var string */
-	private $name;
-
-	public function __construct(string $name) {
-		$this->name = $name;
+/**
+ * A Windows verbatim path prefix, e.g. `\\?\cat_pics\`.
+ */
+final class VerbatimPrefix implements Prefix {
+	public function toString() : string {
+		// TODO unimplemented
 	}
 
-	public function getName() : string {
-		return $this->name;
-	}
-
-	public function getFullPrefix() : string {
-		return "\\\\?\\{$this->name}";
-	}
-
-	public function getLength() : int {
-		return 4 + strlen($this->name);
-	}
-
-	public function isVerbatim() : bool {
-		return true;
+	public function __toString() : string {
+		// TODO unimplemented
 	}
 }

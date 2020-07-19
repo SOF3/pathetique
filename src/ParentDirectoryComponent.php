@@ -5,14 +5,14 @@ declare(strict_types = 1);
 namespace SOFe\Pathetique;
 
 /**
- * A normal Windows path prefix with a disk drive, e.g. `C:\`.
+ * A `..` component.
  */
-final class DiskPrefix implements Prefix {
+final class ParentDirectoryComponent implements Component {
 	public function toString() : string {
-		// TODO unimplemented
+		return "..";
 	}
 
 	public function __toString() : string {
-		// TODO unimplemented
+		return "..";
 	}
 }

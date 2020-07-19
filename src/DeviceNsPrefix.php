@@ -4,29 +4,15 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
-use function strlen;
-
-final class DeviceNsPrefix extends Prefix {
-	/** @var string */
-	private $device;
-
-	public function __construct(string $device) {
-		$this->device = $device;
+/**
+ * A Windows device namespace path prefix, e.g. `\\.\COM42`.
+ */
+final class DeviceNsPrefix implements Prefix {
+	public function toString() : string {
+		// TODO unimplemented
 	}
 
-	public function getDevice() : string {
-		return $this->device;
-	}
-
-	public function getFullPrefix() : string {
-		return "\\\\.\\{$this->device}";
-	}
-
-	public function getLength() : int {
-		return 4 + strlen($this->device);
-	}
-
-	public function isVerbatim() : bool {
-		return false;
+	public function __toString() : string {
+		// TODO unimplemented
 	}
 }

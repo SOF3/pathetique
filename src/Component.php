@@ -4,13 +4,17 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
-final class Component {
-	public const PREFIX = 1;
-	public const ROOT_DIR = 2;
-	public const CURRENT_DIR = 3;
-	public const PARENT_DIR = 4;
-	public const NORMAL = 5;
+interface Component {
+	/**
+	 * Returns the directory-separator-free string for this component.
+	 *
+	 * Note that the leading `\` in `\\server\share` on DOS is not considered a directory separator,
+	 * while the leading `/` in a Unix absolute path is considered a directory separator.
+	 *
+	 * Consequently, joining `toString()` of all components with `Platform->getDirectorySeparator()`
+	 * yields the original path.
+	 */
+	public function toString() : string;
 
-	private function __construct() {
-	}
+	public function __toString() : string;
 }

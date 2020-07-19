@@ -5,9 +5,9 @@ declare(strict_types = 1);
 namespace SOFe\Pathetique;
 
 /**
- * A Windows verbatim path prefix using UNC (Uniform Naming Convention), e.g. `\\?\UNC\server\share`.
+ * The leading `/` in Unix absolute paths.
  */
-final class VerbatimUncPrefix implements Prefix {
+final class UnixPrefix implements Prefix {
 	public function toString() : string {
 		// TODO unimplemented
 	}

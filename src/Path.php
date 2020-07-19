@@ -4,292 +4,447 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
-use const DIRECTORY_SEPARATOR;
-use const PHP_OS_FAMILY;
-use function array_pop;
-use function array_slice;
-use function assert;
-use function count;
-use function implode;
-use function min;
-use function strlen;
-use function substr;
-use Generator;
+use InvalidArgumentException;
+use JsonSerializable;
+use Serializable;
+use function deserialize;
+use function file_exists;
+use function fileinode;
+use function is_dir;
+use function is_file;
+use function realpath;
+use function serialize;
 
-final class Path {
+/**
+ * Represents a path on a particular filesystem.
+ *
+ * This class may become abstract in future versions.
+ * Do not rely on the finalness of this class.
+ *
+ * # Immutability
+ * All methods in this class do not modify the path value.
+ *
+ * # Platform behaviour
+ * The behaviour of this class is platform-dependent.
+ * For example, `Path::new("C:\\")` is treated as an absolute path on Windows,
+ * but it is treated as a relative path on Unix.
+ *
+ * To construct this path for a specific platform,
+ * use `Path::forPlatform($path, $platform)`.
+ *
+ * @see Platform
+ */
+final class Path implements JsonSerializable, Serializable {
 	/** @var string */
 	private $string;
+	/** @var Platform */
+	private $platform;
 
 	/** @var bool */
-	private $prefixInited = false;
-	/** @var Prefix|null */
-	private $prefix = null;
+	private $path;
+
+	private function __construct(string $path, Platform $platform) {
+		if($path === "") {
+			throw new InvalidArgumentException("Empty path is nonsensical");
+		}
+
+		$this->path = $path;
+		$this->platform = $platform;
+		$this->init();
+	}
+
+	private function init() : void {
+		// TODO implement
+	}
 
 	/**
-	 * @var int[][]|string[][]|null
-	 * @phpstan-var array{int, string}[]|null
+	 * Converts a string into a Path.
+	 *
+	 * This assumes the path is a path on the current platform.
+	 *
+	 * @throws InvalidArgumentException if `$path` is empty.
+	 * @throws InvalidArgumentException if `$path` is an invalid path on the current platform.
 	 */
-	private $components = null;
-
 	public static function new(string $path) : self {
-		$self = new self;
-		$self->string = $path;
-		return $self;
+		return new self($path, Platform::current());
 	}
 
 	/**
-	 * Creates a path from its components.
+	 * Converts a string into a Path on a specific platform.
 	 *
-	 * The order of components must be consistent with the definition in `getComponents()`.
-	 *
-	 * @param int[][]|string[][] $components
-	 * @phpstan-param array{int, string}[] $components
+	 * @throws InvalidArgumentException if `$path` is empty.
+	 * @throws InvalidArgumentException if `$path` is an invalid path on `$platform`.
 	 */
-	public static function fromComponents(array $components) : self {
-		$self = new self;
-
-		if(count($components) === 0) {
-			$self->string = ".";
-			$self->components = [[Component::CURRENT_DIR, "."]];
-			return $self;
-		}
-
-		if($components[0][0] === Component::ROOT_DIR) {
-			$path = $components[0][1];
-			$start = 1;
-		} elseif($components[0][0] === Component::PREFIX) {
-			$path = $components[0][1] . DIRECTORY_SEPARATOR;
-			$start = 2;
-		} else {
-			$path = "";
-			$start = 0;
-		}
-
-		$path .= implode(DIRECTORY_SEPARATOR, array_map(static function($component) : string {
-			return $component[1];
-		}, array_slice($components, $start)));
-
-		$self->string = $path;
-		$self->components = $components;
-		return $self;
+	public static function forPlatform(string $path, Platform $platform) {
+		return new self($path, $platform);
 	}
 
-	private function __construct() {
-	}
-
-	public function __toString() : string {
-		return $this->toString();
-	}
 
 	/**
-	 * Returns the raw, user-readable, OS-compatible string representation of this path.
+	 * Converts this path to an OS-compatible string.
 	 *
-	 * @return string
+	 * If the path platform matches the current runtime platform,
+	 * this function can also be used in PHP filesystem functions.
+	 *
+	 * Consider calling `canonicalize()` first.
 	 */
 	public function toString() : string {
 		return $this->string;
 	}
 
-	public function isAbsolute() : bool {
-		if(!$this->hasRoot()) {
-			return false;
-		}
-
-		return !Utils::isWindows() || $this->getPrefix() !== null;
+	public function __toString() : string {
+		return $this->string;
 	}
-
-	public function isRelative() : bool {
-		return !$this->isAbsolute();
-	}
-
-	public function getPrefix() : ?Prefix {
-		if(!Utils::isWindows()) {
-			return null;
-		}
-
-		if(!$this->prefixInited) {
-			$this->prefixInited = true;
-			$this->prefix = Prefix::parse($this->string);
-		}
-
-		return $this->prefix;
-	}
-
-	public function hasRoot() : bool {
-		$string = $this->string;
-		$prefix = $this->getPrefix();
-		$start = $prefix !== null ? strlen($prefix->getFullPrefix()) : 0;
-
-		if(strlen($string) >= $start + 1 && Utils::isSeparator($string[$start])) {
-			return true;
-		}
-		if($prefix !== null && !($prefix instanceof DiskPrefix)) {
-			return true;
-		}
-
-		return false;
-	}
-
 
 	/**
-	 * Returns the components of this path.
-	 *
-	 * Each element of the returned array is an [int, string] tuple.
-	 * The int is one of the constants in the `Component` class.
-	 * The string is the content of the component.
-	 *
-	 * The string contains a trailing directory separator
-	 * if and only if it corresponds to the leading directory separator in an absolute path,
-	 * i.e. the leading `/` in `/dev/null`.
-	 *
-	 * Unless the path contains a verbatim prefix,
-	 * intermediate (i.e. not the leading one in relative paths) current-directory components `./`
-	 * are not yielded.
-	 *
-	 * - If the path contains a prefix, it first yields the prefix,
-	 * then an empty `ROOT_DIR` component.
-	 * - If the path does not contain a prefix but starts with a directory separator,
-	 * it yields a `ROOT_DIR` component with the leading slash.
-	 * - If the path is empty, equals `.` or starts with `./`, it yields `CURRENT_DIR`.
-	 * - For each of the subsequent components,
-	 *   - it yields `[CURRENT_DIR, "."]` for `./` if the path is a verbatim path;
-	 *   - it skips for `./` if the path is not a verbatim path;
-	 *   - it yields `[PARENT_DIR, ".."]` for `../`;
-	 *   - it yields `NORMAL` with only filename contents otherwise.
-	 *
-	 * @return int[][]|string[][]
-	 * @phpstan-return array{int, string}[]
+	 * Displays the path using only printable characters (32 to 127),
+	 * replacing any non-printable bytes with `?`.
 	 */
-	public function getComponents() : array {
-		if($this->components === null) {
-			$comps = [];
-
-			$prefix = $this->getPrefix();
-			$prefixLength = $prefix !== null ? $prefix->getLength() : 0;
-			if($prefixLength > 0) {
-				$comps[] = [Component::PREFIX, substr($this->string, 0, $prefixLength)];
-				$comps[] = [Component::ROOT_DIR, ""];
-			}
-
-			if(strlen($this->string) > $prefixLength && Utils::isSeparator($this->string[$prefixLength])) {
-				if($prefix === null) {
-					$comps[] = [Component::ROOT_DIR, $this->string[0]];
-				}
-				$start = $prefixLength + 1;
-			} elseif($prefix !== null && !($prefix instanceof DiskPrefix) && !$prefix->isVerbatim()) {
-				$comps[] = [Component::ROOT_DIR, ""];
-				$start = $prefixLength + 1;
-			} elseif(strlen($this->string) === 0 ||
-				$this->string[0] === "." && (
-					strlen($this->string) === 1 || Utils::isSeparator($this->string[1]))) {
-				assert($prefix === null, "Prefixed path cannot start with .");
-				$comps[] = [Component::CURRENT_DIR, "."];
-				$start = 2;
-			} else {
-				$start = 0;
-			}
-
-			while(strlen($this->string) > $start) {
-				$slash = Utils::findSlash($this->string, $start, true) ?? strlen($this->string);
-				$comp = substr($this->string, $start, $slash - $start);
-				$start = min($slash + 1, strlen($this->string));
-
-				if($comp === ".") {
-					if($prefix !== null && $prefix->isVerbatim()) {
-						$comps[] = [Component::CURRENT_DIR, "."];
-					}
-					// if not verbatim, simplify */./* to */*
-				} elseif($comp === "..") {
-					$comps[] = [Component::PARENT_DIR, ".."];
-				} elseif($comp !== "") {
-					$comps[] = [Component::NORMAL, $comp];
-				}
-			}
-
-			$this->components = $comps;
-		}
-		return $this->components;
+	public function displayAscii() : string {
+		// TODO unimplemented
 	}
 
 	/**
-	 * Returns the lexical parent of this path.
+	 * Displays the path using only UTF-8 printable characters,
+	 * replacing any non-printable bytes with `?`.
+	 */
+	public function displayUtf8() : string {
+		// TODO unimplemented
+	}
+
+
+	public function serialize() : string {
+		return serialize([
+			"string" => $this->string,
+			"platform" => $this->platform->isWindows(),
+		]);
+	}
+
+	public function deserialize(string $ser) : void {
+		$de = deserialize($ser);
+		$this->string = $de["string"];
+		$this->platform = $de["platform"] ? Platform::windows() : Platform::unix();
+		$this->init();
+	}
+
+	public function jsonSerialize() : array {
+		return $this->string;
+	}
+
+
+	//////////////
+	// PLATFORM //
+	//////////////
+
+	/**
+	 * Gets the Platform used by this path.
+	 */
+	public function getPlatform() : Platform {
+		return $this->platform;
+	}
+
+	/**
+	 * Tries to convert this path for the current platform,
+	 * returning `null` if conversion is not possible.
 	 *
-	 * This method only removes the last path component if any,
-	 * and behaves very differently from the filesystem `../`.
-	 * In particular, if the last component is `../`,
-	 * this would delete the `../`,
-	 * i.e. entering deeper into the filesystem;
-	 * if the last component is a symbolic link,
-	 * this would return the parent directory of the symbolic link
-	 * rather than the parent directory of the file pointed by the symbolic link;
-	 * if the last component is `./` in a verbatim path,
-	 * only the `./` is removed.
+	 * Conversion is not possible if:
+	 * - the path is an absolute path
+	 *   (this would not even make sense for two machines of the same platform)
+	 * - the path contains illegal characters on the current platform
+	 *   (e.g. converting filenames with `\` to a Windows platform)
+	 */
+	public function toCurrentPlatform() : ?Path {
+		// TODO unimplemented
+	}
+
+
+	////////////
+	// PREFIX //
+	////////////
+
+	/**
+	 * Returns whether this path is relative
+	 */
+	public function isAbsolute() : bool {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Returns whether this path is relative
+	 */
+	public function isRelative() : bool {
+		// TODO unimplemented
+	}
+
+
+	///////////////
+	// COMPONENT //
+	///////////////
+
+	// All methods in this section are lexical operations that may not work as expected.
+	// Documentation should attach warning about `.`, `..` and symlink resolution.
+
+	/**
+	 * Returns the *lexical* parent of this path.
 	 *
-	 * If the path only contains `PREFIX` and `ROOT_DIR`, or if the path is `./`,
-	 * `null` is returned.
+	 * This method is not generally useful,
+	 * because it is NOT `..` or symlink sensitive.
+	 * It simply removes the last path component.
 	 *
-	 * If this path only contains one normal or parent-directory component,
-	 * the path `./` is returned.
+	 * To get the *real* parent of this path on the filesystem,
+	 * use `$path->join("..")`.
+	 * Further use `canonicalize()` to produce a "clean" canonical path.
+	 *
+	 * If there is no lexical parent (i.e. there is only one lexical component),
+	 * this method returns `null`.
+	 *
+	 * This method ignores any trailing directory separator.
+	 *
+	 * # Examples
+	 * - `Path::new(".")->getLexicalParent()->toString()`: `null`
+	 * - `Path::new("..")->getLexicalParent()->toString()`: `null`
+	 * - `Path::new("index.html")->getLexicalParent()->toString()`: `null`
+	 * - On Windows: `Path::new("C:\\")->getLexicalParent()`: `null`
+	 * - On Linux: `Path::new("/")->getLexicalParent()`: `null`
 	 */
 	public function getLexicalParent() : ?Path {
-		$comps = $this->getComponents();
-		if(count($comps) === 1 && $comps[0][0] === Component::ROOT_DIR ||
-			count($comps) === 2 && $comps[1][0] === Component::ROOT_DIR ||
-			count($comps) === 1 && $comps[0][0] === Component::CURRENT_DIR) {
-			return null;
-		}
-
-		if(count($comps) === 1) {
-			assert($comps[0][0] === Component::PARENT_DIR || $comps[0][0] === Component::NORMAL);
-			return self::new(".");
-		}
-
-		array_pop($comps);
-		return self::fromComponents($comps);
-	}
-
-	public function getFileName() : ?string {
-		$comps = $this->getComponents();
-		[$type, $value] = $comps[count($comps) - 1];
-		return $type === Component::NORMAL ? $value : null;
-	}
-
-	public function stripPrefix(Path $prefix) : ?Path {
-		$comps = $this->getComponents();
-		$prefixComps = $prefix->getComponents();
-
-		foreach($prefixComps as $i => $c) {
-			if(!isset($comps[$i]) || $comps[$i] !== $c) {
-				return null;
-			}
-		}
-
-		return self::fromComponents(array_slice($comps, count($prefixComps)));
+		// TODO unimplemented
 	}
 
 	/**
-	 * Checks whether two paths are component-wise equal.
+	 * Extracts the *lexical* file name from the path.
 	 *
-	 * This does not resolve any environment or filesystem contexts.
-	 * In particular, this does not cancel `..`
-	 * (because the part before `..` might be a symbolic link),
-	 * does not remove `./` in verbatim paths (since they are not allowed),
-	 * does not remove verbatim prefixes,
-	 * and does not resolve current directories.
+	 * This method ignores any trailing directory separator.
 	 */
-	public function equals(Path $that) : bool {
-		$c1 = $this->getComponents();
-		$c2 = $that->getComponents();
-		if(count($c1) !== count($c2)) {
+	public function getFileName() : string {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Returns the *lexical* base name of this path.
+	 * Returns `null` if the last component is `.` or `..`.
+	 *
+	 * Note that there is no universal standard on the precise definition of "base name" and "extension".
+	 * This function strives to provide a stable but perhaps nonstandard algorithm of extension detection.
+	 *
+	 * # Examples
+	 * - `Path::new(".")->getBaseName()`: `null`
+	 * - `Path::new("..")->getBaseName()`: `null`
+	 * - `Path::new(".gitignore")->getBaseName()`: `".gitignore"`
+	 * - `Path::new("index.d.ts")->getBaseName()`: `"index.d"`
+	 */
+	public function getBaseName() : ?string {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Returns the *lexical* base name of this path,
+	 * or `null` if none is available.
+	 *
+	 * Note that there is no universal standard on the precise definition of "base name" and "extension".
+	 * This function strives to provide a stable but perhaps nonstandard algorithm of extension detection.
+	 *
+	 * # Examples
+	 * - `Path::new(".")->getExtension()`: `null`
+	 * - `Path::new("..")->getExtension()`: `null`
+	 * - `Path::new(".gitignore")->getExtension()`: `""`
+	 * - `Path::new("index.d.ts")->getExtension()`: `"ts"`
+	 */
+	public function getExtension() : ?string {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Returns a clone of this path with the file extension set as `$extension`,
+	 * or without an extension if `$extension` is null.
+	 *
+	 * @throws InvalidArgumentException if `$this` ends with `.` or `..`
+	 * @throws InvalidArgumentException if `$extension` contains invalid characters for a path.
+	 */
+	public function withExtension(?string $extension) : self {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Returns an iterator for the lexical components in this Path.
+	 *
+	 * To get the *real* ancestors of this path on the filesystem,
+	 * use `$path->toCanonical()->getComponents()`.
+	 *
+	 * @see Component
+	 */
+	public function getComponents() : iterable {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Checks whether the path starts with the same *lexical* components as `$base`.
+	 *
+	 * To check whether this path is really under `$base`,
+	 * call `canonicalize()` first.
+	 */
+	public function startsWith(Path $base) : bool {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Checks whether the path ends with the same *lexical* components as `$child`.
+	 *
+	 * To check whether this path really contains `$base`,
+	 * call `canonicalize()` first.
+	 */
+	public function endsWith(Path $base) : bool {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Lexically appends `$other` to `$this`.
+	 *
+	 * If `$other` is absolute, `$other` is returned.
+	 * Otherwise, this method treats `$this` as a directory,
+	 * and resolves `$path` as a relative path from the `$this` directory.
+	 *
+	 * This method is same as `join` but always appends `/` to `$this`.
+	 */
+	public function join(Path $other) : Path {
+		// TODO unimplemented
+	}
+
+	/**
+	 * Lexically resolves `$other` in the context of `$this`.
+	 *
+	 * This method is same as `join` for paths ending with `/`.
+	 *
+	 * The behaviour of this method is similar to resolving paths in HTML.
+	 * In particular,
+	 * - if `$other` is absolute, `$other` is returned.
+	 * - `Path::new("a/b/")->resolve(Path::new("c"))` returns `Path::new("a/b/c")`.
+	 * - `Path::new("a/b")->resolve(Path::new("c"))` returns `Path::new("a/c")`.
+	 */
+	public function resolve(Path $other) : Path {
+		// TODO unimplemented
+	}
+
+
+	////////////////
+	// FILESYSTEM //
+	////////////////
+
+	// All methods in this section must call `$this->platform->check()`,
+	// and copy this line in documentation:
+	// * @throws PlatformMismatchException if this path is not compatible with the current platform.
+
+	/**
+	 * Returns the canonicalized version of this path.
+	 *
+	 * This method *may or may not* return $this if the path is already canonicalized.
+	 *
+	 * The return value never has a trailing directory separator unless it only consists of the prefix.
+	 *
+	 * @throws IOException if an IO error occurred during canonicalization.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function canonicalize() : self {
+		$this->platform->check();
+		$path = Utils::throwIo(@realpath($this->toString()));
+		return self::new(realpath($this->toString()));
+	}
+
+	/**
+	 * Checks whether two files represent the same canonical paths.
+	 *
+	 * This returns `false` if any of the two paths belong to another platform
+	 * or refer to nonexistent files.
+	 * For example, for `$path = Path::new("no such file")`, `$path->equals($path)` returns false.
+	 * Therefore, this method is neither reflexive nor consistent.
+	 *
+	 * This method does not whether the two files are *physically* identical.
+	 * On Unix platforms, to check whether they are hard links to the same file,
+	 * use `$path->getFileId()`.
+	 * To check whether they are files mounted on different filesystems (hence different inodes),
+	 * refer to [this StackOverflow answer](https://stackoverflow.com/a/31097497/3990767).
+	 *
+	 * @throws IOException if an IO error occurred while interacting with the filesystem.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function isCanonicallyEqual(Path $other) : bool {
+		if(!$this->exists() || !$other->exists()) { // platform checked
 			return false;
 		}
 
-		foreach($c1 as $i => $c) {
-			if($c !== $c2[$i]) {
-				return false;
-			}
-		}
+		return $this->canonicalize()->toString() === $other->canonicalize()->toString();
+	}
 
-		return true;
+	/**
+	 * Constructs the shortest relative path from the parent directory of $this to $dest if they share some common ancestor,
+	 * otherwise returns an absolute path.
+	 *
+	 * This method canonicalizes both objects, and is symlink-safe.
+	 *
+	 * This method is the reverse of `resolve`.
+	 * In other words, if `$result = $src->findPath($dest)`,
+	 * then  `$src->resolve($result)` represents the same file as `$dest`.
+	 *
+	 * @throws IOException if an IO error occurred during canonicalization.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function findPath(Path $dest) : self {
+		// TODO unimplemented
+		// NOTE Beware the difference between "foo/" and "foo" in the implementation.
+	}
+
+	/**
+	 * Retrieves the file inode. This correpsonds to the `fileinode` PHP function.
+	 *
+	 * @throws IOException if an IO error occurred during canonicalization.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function getFileId() : int {
+		$this->platform->check();
+		return Utils::throwIo(@fileinode($this->toString()));
+	}
+
+
+	/**
+	 * Checks whether the path refers to an existent file.
+	 *
+	 * If the path refers to an eventually-dead symlink,
+	 * this function also returns false.
+	 *
+	 * This is an alias to the PHP `file_exists` function.
+	 *
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function exists() : bool {
+		$this->platform->check();
+		return file_exists($this->toString());
+	}
+
+	/**
+	 * Checks whether the path refers to an existent regular file.
+	 *
+	 * This function traverses symlinks.
+	 *
+	 * This is an alias to the PHP `is_file` function.
+	 *
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function isFile() : bool {
+		$this->platform->check();
+		return is_file($this->toString());
+	}
+
+	/**
+	 * Checks whether the path refers to an existent file.
+	 *
+	 * This function traverses symlinks.
+	 *
+	 * This is an alias to the PHP `is_dir` function.
+	 *
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function isDir() : bool {
+		$this->platform->check();
+		return is_dir($this->toString());
 	}
 }
