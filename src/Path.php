@@ -7,13 +7,13 @@ namespace SOFe\Pathetique;
 use InvalidArgumentException;
 use JsonSerializable;
 use Serializable;
-use function deserialize;
 use function file_exists;
 use function fileinode;
 use function is_dir;
 use function is_file;
 use function realpath;
 use function serialize;
+use function unserialize;
 
 /**
  * Represents a path on a particular filesystem.
@@ -48,7 +48,7 @@ final class Path implements JsonSerializable, Serializable {
 			throw new InvalidArgumentException("Empty path is nonsensical");
 		}
 
-		$this->path = $path;
+		$this->string = $path;
 		$this->platform = $platform;
 		$this->init();
 	}
@@ -75,7 +75,7 @@ final class Path implements JsonSerializable, Serializable {
 	 * @throws InvalidArgumentException if `$path` is empty.
 	 * @throws InvalidArgumentException if `$path` is an invalid path on `$platform`.
 	 */
-	public static function forPlatform(string $path, Platform $platform) {
+	public static function forPlatform(string $path, Platform $platform) : self {
 		return new self($path, $platform);
 	}
 
@@ -120,14 +120,17 @@ final class Path implements JsonSerializable, Serializable {
 		]);
 	}
 
-	public function deserialize(string $ser) : void {
-		$de = deserialize($ser);
+	public function unserialize($ser) : void {
+		$de = unserialize($ser);
 		$this->string = $de["string"];
 		$this->platform = $de["platform"] ? Platform::windows() : Platform::unix();
 		$this->init();
 	}
 
-	public function jsonSerialize() : array {
+	/**
+	 * @return mixed
+	 */
+	public function jsonSerialize() {
 		return $this->string;
 	}
 
@@ -161,6 +164,10 @@ final class Path implements JsonSerializable, Serializable {
 	////////////
 	// PREFIX //
 	////////////
+
+	public function getPrefix() : ?Prefix {
+		// TODO unimplemented
+	}
 
 	/**
 	 * Returns whether this path is relative
@@ -270,6 +277,8 @@ final class Path implements JsonSerializable, Serializable {
 	 *
 	 * To get the *real* ancestors of this path on the filesystem,
 	 * use `$path->toCanonical()->getComponents()`.
+	 *
+	 * @phpstan-return iterable<Component>
 	 *
 	 * @see Component
 	 */

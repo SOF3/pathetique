@@ -4,6 +4,7 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
+use function assert;
 use function error_get_last;
 
 /**
@@ -20,8 +21,8 @@ final class Utils {
 	 *
 	 * @template T
 	 *
-	 * @param mixed|false $value
-	 * @phpstan-param T|false $value
+	 * @param mixed|bool $value
+	 * @phpstan-param T|bool $value
 	 *
 	 * @return mixed
 	 * @phpstan-return T
@@ -34,6 +35,8 @@ final class Utils {
 			$message = $error["message"] ?? "unknown IO error";
 			throw new IOException($message);
 		}
+		assert($value !== true);
+		/** @phpstan-var T $value */
 		return $value;
 	}
 }

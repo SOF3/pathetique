@@ -1,0 +1,20 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:unserialize\\(\\) has parameter \\$ser with no typehint specified\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Parameter \\#1 \\$path of static method SOFe\\\\Pathetique\\\\Path\\:\\:new\\(\\) expects string, string\\|false given\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:getFileId\\(\\) should return int but returns bool\\|int\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method .* should return .* but return statement is missing\\.#"
+			path: src/*.php
