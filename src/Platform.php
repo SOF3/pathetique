@@ -4,7 +4,9 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
+use InvalidArgumentException;
 use const PHP_OS;
+use function assert;
 use function strtoupper;
 use function substr;
 
@@ -47,12 +49,27 @@ final class Platform {
 	 * Checks whether the string contains exactly one character,
 	 * which this platform interprets as a directory separator.
 	 */
-	public function isDirectorySeparator(string $char) : bool {
+	public function isDirectorySeparator(string $char, bool $isVerbatim = false) : bool {
 		if($this->isWindows) {
-			return $char === "/" || $char === "\\";
+			if($isVerbatim) {
+				return $char === "\\";
+			} else {
+				return $char === "/" || $char === "\\";
+			}
 		} else {
+			assert(!$isVerbatim);
 			return $char === "/";
 		}
+	}
+
+
+	/**
+	 * Validates a normal path component.
+	 *
+	 * @throws InvalidArgumentException if the component name contains invalid characters
+	 */
+	public function validateComponent(string $name, bool $verbatim) : void {
+		// TODO unimplemented
 	}
 
 

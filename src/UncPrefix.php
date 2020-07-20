@@ -26,6 +26,10 @@ final class UncPrefix implements Prefix {
 		return $this->share;
 	}
 
+	public function isVerbatim() : bool {
+		return false;
+	}
+
 	public function toString() : string {
 		return "\\\\" . $this->server . "\\" . $this->share;
 	}

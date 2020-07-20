@@ -19,6 +19,10 @@ final class DeviceNsPrefix implements Prefix {
 		return $this->name;
 	}
 
+	public function isVerbatim() : bool {
+		return false;
+	}
+
 	public function toString() : string {
 		return "\\\\.\\" . $this->name;
 	}

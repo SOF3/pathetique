@@ -21,6 +21,10 @@ final class DiskPrefix implements Prefix {
 		return strtoupper($this->drive);
 	}
 
+	public function isVerbatim() : bool {
+		return false;
+	}
+
 	public function toString() : string {
 		return $this->drive . ":";
 	}

@@ -18,3 +18,12 @@ parameters:
 		-
 			message: "#^Method .* should return .* but return statement is missing\\.#"
 			path: src/Path.php
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Utils\\:\\:parseWindowsPrefix\\(\\) should return SOFe\\\\Pathetique\\\\Prefix\\|null but return statement is missing\\.$#"
+			count: 1
+			path: src/Utils.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Utils\\:\\:parseComponent\\(\\) should return SOFe\\\\Pathetique\\\\Component but return statement is missing\\.$#"
+			count: 1
+			path: src/Utils.php

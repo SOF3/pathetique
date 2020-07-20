@@ -4,6 +4,7 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
+use Generator;
 use InvalidArgumentException;
 use JsonSerializable;
 use Serializable;
@@ -13,6 +14,7 @@ use function is_dir;
 use function is_file;
 use function realpath;
 use function serialize;
+use function strlen;
 use function unserialize;
 
 /**
@@ -43,18 +45,29 @@ final class Path implements JsonSerializable, Serializable {
 	/** @var bool */
 	private $path;
 
-	private function __construct(string $path, Platform $platform) {
-		if($path === "") {
-			throw new InvalidArgumentException("Empty path is nonsensical");
-		}
+	/** @var Generator<int, null>|null */
+	private $parser;
 
+	/** @var bool */
+	private $prefixParsed = false;
+	/** @var Prefix|null */
+	private $prefix = null;
+
+	/** @var Component[] */
+	private $components = [];
+
+	private function __construct(string $path, Platform $platform) {
 		$this->string = $path;
 		$this->platform = $platform;
 		$this->init();
 	}
 
 	private function init() : void {
-		// TODO implement
+		if($this->string === "") {
+			throw new InvalidArgumentException("Empty path is nonsensical");
+		}
+
+		$this->parser = $this->parseComponents();
 	}
 
 	/**
@@ -63,7 +76,6 @@ final class Path implements JsonSerializable, Serializable {
 	 * This assumes the path is a path on the current platform.
 	 *
 	 * @throws InvalidArgumentException if `$path` is empty.
-	 * @throws InvalidArgumentException if `$path` is an invalid path on the current platform.
 	 */
 	public static function new(string $path) : self {
 		return new self($path, Platform::current());
@@ -273,6 +285,55 @@ final class Path implements JsonSerializable, Serializable {
 	}
 
 	/**
+	 * Parses components from the path and pushes results to $this->components.
+	 *
+	 * The generator yields void when it adds a new value to $this->components.
+	 * If no more components can be found, it sets $this->parser to null
+	 * and returns void.
+	 *
+	 * @phpstan-return Generator<int, null, void, void>
+	 */
+	private function parseComponents() : Generator {
+		if($this->platform->isWindows()) {
+			$this->prefix = Utils::parseWindowsPrefix($this->string, $index);
+		} else {
+			if($this->string[0] === "/") {
+				$this->prefix = new UnixPrefix;
+				$index = 1;
+			} else {
+				$this->prefix = null;
+				$index = 0;
+			}
+		}
+		$this->prefixParsed = true;
+		if($this->prefix !== null) {
+			yield;
+			$isVerbatim = $this->prefix->isVerbatim();
+			assert(
+				strlen($this->string) === $index - 1 ||
+				$this->platform->isDirectorySeparator($this->string[$index - 1])
+			);
+		} else {
+			$isVerbatim = false;
+		}
+
+		$currentComponent = "";
+		while($index < strlen($this->string)) {
+			if($this->platform->isDirectorySeparator($this->string[$index], $isVerbatim)) {
+				$this->components[] = Utils::parseComponent($currentComponent, $isVerbatim);
+				yield;
+			} else {
+				$currentComponent .= $this->string[$index];
+			}
+		}
+
+		$this->components[] = Utils::parseComponent($currentComponent, $isVerbatim);
+		yield;
+
+		$this->parser = null;
+	}
+
+	/**
 	 * Returns an iterator for the lexical components in this Path.
 	 *
 	 * To get the *real* ancestors of this path on the filesystem,
@@ -283,7 +344,18 @@ final class Path implements JsonSerializable, Serializable {
 	 * @see Component
 	 */
 	public function getComponents() : iterable {
-		// TODO unimplemented
+		$i = 0;
+		while(true) {
+			if(!isset($this->components[$i])) {
+				if($this->parser !== null) {
+					$this->parser->next();
+				}
+				if(!isset($this->components[$i])) {
+					break;
+				}
+			}
+			yield $this->components[$i++];
+		}
 	}
 
 	/**

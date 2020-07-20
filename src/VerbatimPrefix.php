@@ -19,6 +19,10 @@ final class VerbatimPrefix implements Prefix {
 		return $this->name;
 	}
 
+	public function isVerbatim() : bool {
+		return true;
+	}
+
 	public function toString() : string {
 		return "\\\\?\\" . $this->name;
 	}

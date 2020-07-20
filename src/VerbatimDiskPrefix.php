@@ -21,6 +21,10 @@ final class VerbatimDiskPrefix implements Prefix {
 		return strtoupper($this->disk);
 	}
 
+	public function isVerbatim() : bool {
+		return true;
+	}
+
 	public function toString() : string {
 		return "\\\\?\\" . $this->disk . ":";
 	}
