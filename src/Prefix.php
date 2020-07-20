@@ -6,10 +6,9 @@ namespace SOFe\Pathetique;
 
 interface Prefix {
 	/**
-	 * Returns a human-readable string for this prefix.
+	 * Converts this prefix to a string.
 	 *
-	 * This is different from `PrefixComponent->toString()`
-	 * in that this method is only intended for human reading.
+	 * This is equivalent to the result of `PrefixComponent->toString()`.
 	 */
 	public function toString() : string;
 

@@ -9,10 +9,10 @@ namespace SOFe\Pathetique;
  */
 final class UnixPrefix implements Prefix {
 	public function toString() : string {
-		// TODO unimplemented
+		return "";
 	}
 
 	public function __toString() : string {
-		// TODO unimplemented
+		return $this->toString();
 	}
 }

@@ -17,4 +17,4 @@ parameters:
 
 		-
 			message: "#^Method .* should return .* but return statement is missing\\.#"
-			path: src/*.php
+			path: src/Path.php

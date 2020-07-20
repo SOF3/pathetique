@@ -8,11 +8,22 @@ namespace SOFe\Pathetique;
  * A normal path component.
  */
 final class NormalComponent implements Component {
+	/** @var string */
+	private $name;
+
+	public function __construct(string $name) {
+		$this->name = $name;
+	}
+
+	public function getName() : string {
+		return $this->name;
+	}
+
 	public function toString() : string {
-		// TODO unimplemented
+		return $this->name;
 	}
 
 	public function __toString() : string {
-		// TODO unimplemented
+		return $this->toString();
 	}
 }

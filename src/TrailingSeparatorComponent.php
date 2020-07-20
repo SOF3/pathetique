@@ -9,10 +9,10 @@ namespace SOFe\Pathetique;
  */
 final class TrailingSeparatorComponent implements Component {
 	public function toString() : string {
-		// TODO unimplemented
+		return "";
 	}
 
 	public function __toString() : string {
-		// TODO unimplemented
+		return "";
 	}
 }
