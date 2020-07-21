@@ -23,6 +23,10 @@ final class NormalComponent implements Component {
 		return $this->name;
 	}
 
+	public function toNormalizedString() : ?string {
+		return $this->name;
+	}
+
 	public function __toString() : string {
 		return $this->toString();
 	}

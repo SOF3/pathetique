@@ -16,5 +16,11 @@ interface Component {
 	 */
 	public function toString() : string;
 
+	/**
+	 * Returns the normalized string for this component,
+	 * or null if this component should not appear in the normalized path.
+	 */
+	public function toNormalizedString() : ?string;
+
 	public function __toString() : string;
 }

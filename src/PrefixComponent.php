@@ -4,6 +4,8 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
+use function strtoupper;
+
 /**
  * The prefix component in absolute paths.
  */
@@ -21,6 +23,14 @@ final class PrefixComponent implements Component {
 
 	public function toString() : string {
 		return $this->prefix->toString();
+	}
+
+	public function toNormalizedString() : string {
+		if($this->prefix instanceof DiskPrefix || $this->prefix instanceof VerbatimDiskPrefix) {
+			return strtoupper($this->toString());
+		}
+
+		return $this->toString();
 	}
 
 	public function __toString() : string {

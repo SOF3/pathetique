@@ -10,6 +10,7 @@ use JsonSerializable;
 use Serializable;
 use function file_exists;
 use function fileinode;
+use function implode;
 use function is_dir;
 use function is_file;
 use function realpath;
@@ -106,6 +107,17 @@ final class Path implements JsonSerializable, Serializable {
 
 	public function __toString() : string {
 		return $this->string;
+	}
+
+	public function toNormalizedString() : string {
+		$comps = [];
+		foreach($this->getComponents() as $component) {
+			$string = $component->toNormalizedString();
+			if($string !== null) {
+				$comps[] = $string;
+			}
+		}
+		return implode($this->platform->getDirectorySeparator(), $comps);
 	}
 
 	/**
@@ -340,6 +352,7 @@ final class Path implements JsonSerializable, Serializable {
 	 * use `$path->toCanonical()->getComponents()`.
 	 *
 	 * @phpstan-return iterable<Component>
+	 * @throws InvalidArgumentException this exception is actually thrown during iteration
 	 *
 	 * @see Component
 	 */
@@ -355,6 +368,20 @@ final class Path implements JsonSerializable, Serializable {
 				}
 			}
 			yield $this->components[$i++];
+		}
+	}
+
+
+	/**
+	 * Validates this path.
+	 *
+	 * This function call is unnecssary if other component-parsing functions are called.
+	 * The implementation is equivalent to exhausting `getComponents()` once.
+	 *
+	 * @throws InvalidArgumentException
+	 */
+	public function validate() : void {
+		foreach($this->getComponents() as $_) {
 		}
 	}
 

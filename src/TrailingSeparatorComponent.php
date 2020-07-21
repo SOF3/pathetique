@@ -12,6 +12,10 @@ final class TrailingSeparatorComponent implements Component {
 		return "";
 	}
 
+	public function toNormalizedString() : string {
+		return "";
+	}
+
 	public function __toString() : string {
 		return "";
 	}

@@ -14,6 +14,10 @@ final class CurrentDirectoryComponent implements Component {
 		return ".";
 	}
 
+	public function toNormalizedString() : ?string {
+		return null;
+	}
+
 	public function __toString() : string {
 		return ".";
 	}
