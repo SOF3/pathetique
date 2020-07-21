@@ -1,0 +1,16 @@
+name: Docs
+on:
+  push:
+    branches: [master]
+jobs:
+  docs:
+    name: Doxygen
+    runs-on: ubuntu-latest
+    steps:
+      - run: doxygen doxygen.conf
+      - run: cp -r docs/Documentation ../docs
+      - run: git checkout gh-pages
+      - run: rm -r master && cp -r ../docs master
+      - run: touch .nojekyll && git add .
+      - run: git config user.name "github-actions[bot]" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - run: git commit -m "Documentation for ${{github.sha}}"
