@@ -183,7 +183,21 @@ final class Utils {
 	/**
 	 * @throws InvalidArgumentException
 	 */
-	public static function parseComponent(string $string, bool $verbatim) : Component {
-		// TODO unimplemented
+	public static function parseComponent(string $string, bool $verbatim, bool $last) : ?Component {
+		if(!$verbatim) {
+			if($string === ".") {
+				return new CurrentDirectoryComponent;
+			}
+
+			if($string === "..") {
+				return new ParentDirectoryComponent;
+			}
+		}
+
+		if($string === "") {
+			return $last ? new TrailingSeparatorComponent : null;
+		}
+
+		return new NormalComponent($string);
 	}
 }

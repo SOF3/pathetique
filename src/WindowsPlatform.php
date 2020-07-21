@@ -48,8 +48,8 @@ final class WindowsPlatform extends Platform {
 		}
 
 		if(!$verbatim) {
-			if($name[strlen($name) - 1] === ".") {
-				throw new InvalidArgumentException("Windows path components must not end with a dot");
+			if($name[strlen($name) - 1] === "." || $name[strlen($name) - 1] === " ") {
+				throw new InvalidArgumentException("Windows path components must not end with a dot or space");
 			}
 		}
 	}

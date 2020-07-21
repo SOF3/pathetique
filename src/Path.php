@@ -8,6 +8,7 @@ use Generator;
 use InvalidArgumentException;
 use JsonSerializable;
 use Serializable;
+use function assert;
 use function file_exists;
 use function fileinode;
 use function implode;
@@ -16,6 +17,7 @@ use function is_file;
 use function realpath;
 use function serialize;
 use function strlen;
+use function strrpos;
 use function unserialize;
 
 /**
@@ -125,7 +127,14 @@ final class Path implements JsonSerializable, Serializable {
 	 * replacing any non-printable bytes with `?`.
 	 */
 	public function displayAscii() : string {
-		// TODO unimplemented
+		$string = $this->string;
+		for($i = 0; $i < strlen($string); $i++) {
+			$ord = ord($string[$i]);
+			if($ord < 32 || $ord >= 127) { // ^? is also nonprintable
+				$string[$i] = "?";
+			}
+		}
+		return $string;
 	}
 
 	/**
@@ -133,7 +142,53 @@ final class Path implements JsonSerializable, Serializable {
 	 * replacing any non-printable bytes with `?`.
 	 */
 	public function displayUtf8() : string {
-		// TODO unimplemented
+		$string = $this->string;
+
+		for($i = 0; $i < strlen($string); $i++) {
+			$ord = ord($string[$i]);
+			if(32 <= $ord && $ord <= 0x7E) { // ^? is in C0
+				continue;
+			}
+			if(($ord & 0xE0) === 0xC0) {
+				if(strlen($string) > $i + 1) {
+					$ord2 = ord($string[$i + 1]);
+					if(($ord2 & 0xC0) === 0x80) {
+						// control characters: U+0080 to U+009F
+						if($ord === 0xC2 && (0x80 <= $ord2 && $ord2 <= 0x9F)) {
+							$string[$i] = "?";
+							$string[$i + 1] = "?";
+						}
+						$i++;
+						continue;
+					}
+				}
+			}
+			if(($ord & 0xF0) === 0xE0) {
+				if(strlen($string) > $i + 2) {
+					$ord2 = ord($string[$i + 1]);
+					$ord3 = ord($string[$i + 2]);
+					if(($ord2 & 0xC0) === 0x80 && ($ord3 & 0xC0) === 0x80) {
+						$i += 2;
+						continue;
+					}
+				}
+			}
+			if(($ord & 0xF8) === 0xF8) {
+				if(strlen($string) > $i + 3) {
+					$ord2 = ord($string[$i + 1]);
+					$ord3 = ord($string[$i + 2]);
+					$ord4 = ord($string[$i + 3]);
+					if(($ord2 & 0xC0) === 0x80 && ($ord3 & 0xC0) === 0x80 && ($ord4 & 0xC0) === 0x80) {
+						$i += 3;
+						continue;
+					}
+				}
+			}
+
+			$string[$i] = "?";
+		}
+
+		return $string;
 	}
 
 
@@ -179,6 +234,8 @@ final class Path implements JsonSerializable, Serializable {
 	 *   (this would not even make sense for two machines of the same platform)
 	 * - the path contains illegal characters on the current platform
 	 *   (e.g. converting filenames with `\` to a Windows platform)
+	 *
+	 * All Windows relative paths can be converted to Unix platform.
 	 */
 	public function toCurrentPlatform() : ?Path {
 		// TODO unimplemented
@@ -190,21 +247,32 @@ final class Path implements JsonSerializable, Serializable {
 	////////////
 
 	public function getPrefix() : ?Prefix {
-		// TODO unimplemented
+		if(!$this->prefixParsed) {
+			foreach($this->getComponents() as $component) {
+				break; // only one iteration is enough
+			}
+		}
+
+		assert($this->prefixParsed);
+		return $this->prefix;
 	}
 
 	/**
 	 * Returns whether this path is relative
 	 */
 	public function isAbsolute() : bool {
-		// TODO unimplemented
+		return $this->getPrefix() !== null;
 	}
 
 	/**
 	 * Returns whether this path is relative
 	 */
 	public function isRelative() : bool {
-		// TODO unimplemented
+		return $this->getPrefix() === null;
+	}
+
+	public function hasTrailingSeparator() : bool {
+		return $this->platform->isDirectorySeparator($this->string[strlen($this->string) - 1]);
 	}
 
 
@@ -245,15 +313,27 @@ final class Path implements JsonSerializable, Serializable {
 	/**
 	 * Extracts the *lexical* file name from the path.
 	 *
-	 * This method ignores any trailing directory separator.
+	 * Returns "." and ".." for trailing current-directory and parent-directory components.
+	 *
+	 * Returns null if the path only contains a prefix.
+	 *
+	 * Trailng directory separators are automatically removed.
 	 */
-	public function getFileName() : string {
-		// TODO unimplemented
+	public function getFileName() : ?string {
+		$last = null;
+		foreach($this->getComponents() as $component) {
+			if(!($component instanceof TrailingSeparatorComponent) && !($component instanceof PrefixComponent)) {
+				$last = $component;
+			}
+		}
+		return $last !== null ? $last->toString() : null;
 	}
 
 	/**
 	 * Returns the *lexical* base name of this path.
-	 * Returns `null` if the last component is `.` or `..`.
+	 * Returns `null` if the last component is a prefix, `.` or `..`.
+	 *
+	 * Trailng directory separators are automatically removed.
 	 *
 	 * Note that there is no universal standard on the precise definition of "base name" and "extension".
 	 * This function strives to provide a stable but perhaps nonstandard algorithm of extension detection.
@@ -265,12 +345,24 @@ final class Path implements JsonSerializable, Serializable {
 	 * - `Path::new("index.d.ts")->getBaseName()`: `"index.d"`
 	 */
 	public function getBaseName() : ?string {
-		// TODO unimplemented
+		$name = $this->getFileName();
+		if($name === null || $name === "." || $name === "..") {
+			return null;
+		}
+
+		$pos = strrpos($name, ".");
+		if($pos === 0 || $pos === false) {
+			return $name;
+		} else {
+			return substr($name, 0, $pos);
+		}
 	}
 
 	/**
 	 * Returns the *lexical* base name of this path,
 	 * or `null` if none is available.
+	 *
+	 * This method ignores any trailing directory separator.
 	 *
 	 * Note that there is no universal standard on the precise definition of "base name" and "extension".
 	 * This function strives to provide a stable but perhaps nonstandard algorithm of extension detection.
@@ -282,18 +374,37 @@ final class Path implements JsonSerializable, Serializable {
 	 * - `Path::new("index.d.ts")->getExtension()`: `"ts"`
 	 */
 	public function getExtension() : ?string {
-		// TODO unimplemented
+		$name = $this->getFileName();
+		if($name === null || $name === "." || $name === "..") {
+			return null;
+		}
+
+		$pos = strrpos($name, ".");
+		if($pos === 0 || $pos === false) {
+			return null;
+		} else {
+			return substr($name, $pos + 1);
+		}
 	}
 
 	/**
 	 * Returns a clone of this path with the file extension set as `$extension`,
 	 * or without an extension if `$extension` is null.
 	 *
-	 * @throws InvalidArgumentException if `$this` ends with `.` or `..`
+	 * @throws InvalidArgumentException if `$this` only has a prefix or ends with `.` or `..`
 	 * @throws InvalidArgumentException if `$extension` contains invalid characters for a path.
 	 */
 	public function withExtension(?string $extension) : self {
-		// TODO unimplemented
+		$name = $this->getBaseName();
+		if($name === null) {
+			throw new InvalidArgumentException("Cannot use withExtension for paths ending with prefix, . or ..");
+		}
+
+		if($extension != null) {
+			$name = "$name.$extension";
+		}
+
+		return $this->getLexicalParent()->join($name);
 	}
 
 	/**
@@ -319,6 +430,7 @@ final class Path implements JsonSerializable, Serializable {
 		}
 		$this->prefixParsed = true;
 		if($this->prefix !== null) {
+			$this->components[] = new PrefixComponent($this->prefix);
 			yield;
 			$isVerbatim = $this->prefix->isVerbatim();
 			assert(
@@ -332,14 +444,21 @@ final class Path implements JsonSerializable, Serializable {
 		$currentComponent = "";
 		while($index < strlen($this->string)) {
 			if($this->platform->isDirectorySeparator($this->string[$index], $isVerbatim)) {
-				$this->components[] = Utils::parseComponent($currentComponent, $isVerbatim);
-				yield;
+				$this->platform->validateComponent($currentComponent, $this->prefix !== null && $this->prefix->isVerbatim());
+				$comp = Utils::parseComponent($currentComponent, $isVerbatim, false);
+				if($comp !== null) {
+					$this->components[] = $comp;
+					yield;
+				}
 			} else {
 				$currentComponent .= $this->string[$index];
 			}
 		}
 
-		$this->components[] = Utils::parseComponent($currentComponent, $isVerbatim);
+		$comp = Utils::parseComponent($currentComponent, $isVerbatim, true);
+		if($comp !== null) {
+			$this->components[] = $comp;
+		}
 		yield;
 
 		$this->parser = null;
@@ -408,13 +527,22 @@ final class Path implements JsonSerializable, Serializable {
 	/**
 	 * Lexically appends `$other` to `$this`.
 	 *
+	 * This is an alias for `$this->joinPath($other)`.
+	 */
+	public function join(string $other) : Path {
+		return $this->joinPath(Path::new($other));
+	}
+
+	/**
+	 * Lexically appends `$other` to `$this`.
+	 *
 	 * If `$other` is absolute, `$other` is returned.
 	 * Otherwise, this method treats `$this` as a directory,
 	 * and resolves `$path` as a relative path from the `$this` directory.
 	 *
-	 * This method is same as `join` but always appends `/` to `$this`.
+	 * This method is same as `resolve` but always appends `/` to `$this`.
 	 */
-	public function join(Path $other) : Path {
+	public function joinPath(Path $other) : Path {
 		// TODO unimplemented
 	}
 
