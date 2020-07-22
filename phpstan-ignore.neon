@@ -1,11 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:unserialize\\(\\) has parameter \\$ser with no typehint specified\\.$#"
-			count: 1
-			path: src/Path.php
-
-		-
 			message: "#^Parameter \\#1 \\$path of static method SOFe\\\\Pathetique\\\\Path\\:\\:new\\(\\) expects string, string\\|false given\\.$#"
 			count: 1
 			path: src/Path.php
@@ -14,3 +9,44 @@ parameters:
 			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:getFileId\\(\\) should return int but returns bool\\|int\\.$#"
 			count: 1
 			path: src/Path.php
+
+		-
+			message: "#^Property SOFe\\\\Pathetique\\\\DirectoryGuard\\:\\:\\$dir \\(resource\\|null\\) does not accept bool\\|resource\\.$#"
+			count: 1
+			path: src/DirectoryGuard.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:toCurrentPlatform\\(\\) should return SOFe\\\\Pathetique\\\\Path\\|null but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:getLexicalParent\\(\\) should return SOFe\\\\Pathetique\\\\Path\\|null but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:startsWith\\(\\) should return bool but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:endsWith\\(\\) should return bool but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:joinPath\\(\\) should return SOFe\\\\Pathetique\\\\Path but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:resolve\\(\\) should return SOFe\\\\Pathetique\\\\Path but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+
+		-
+			message: "#^Method SOFe\\\\Pathetique\\\\Path\\:\\:findPath\\(\\) should return SOFe\\\\Pathetique\\\\Path but return statement is missing\\.$#"
+			count: 1
+			path: src/Path.php
+

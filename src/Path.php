@@ -4,20 +4,27 @@ declare(strict_types = 1);
 
 namespace SOFe\Pathetique;
 
+use Directory;
 use Generator;
 use InvalidArgumentException;
 use JsonSerializable;
 use Serializable;
 use function assert;
+use function copy;
+use function error_get_last;
 use function file_exists;
 use function fileinode;
 use function implode;
 use function is_dir;
 use function is_file;
+use function is_link;
+use function mkdir;
+use function readlink;
 use function realpath;
 use function serialize;
 use function strlen;
 use function strrpos;
+use function symlink;
 use function unserialize;
 
 /**
@@ -404,7 +411,8 @@ final class Path implements JsonSerializable, Serializable {
 			$name = "$name.$extension";
 		}
 
-		return $this->getLexicalParent()->join($name);
+		$parent = $this->getLexicalParent();
+		return $parent !== null ? $parent->join($name) : Path::new($name);
 	}
 
 	/**
@@ -530,7 +538,7 @@ final class Path implements JsonSerializable, Serializable {
 	 * This is an alias for `$this->joinPath($other)`.
 	 */
 	public function join(string $other) : Path {
-		return $this->joinPath(Path::new($other));
+		return $this->joinPath(Path::forPlatform($other, $this->platform));
 	}
 
 	/**
@@ -584,6 +592,20 @@ final class Path implements JsonSerializable, Serializable {
 		$this->platform->check();
 		$path = Utils::throwIo(@realpath($this->toString()));
 		return self::new(realpath($this->toString()));
+	}
+
+	/**
+	 * Returns the canonicalized version of this path,
+	 * or return $this if not possible.
+	 *
+	 * This is an error-free version of `canonicalize`.
+	 */
+	public function tryCanonicalize() : self {
+		try {
+			return $this->canonicalize();
+		} catch(IOException $e) {
+			return $this;
+		}
 	}
 
 	/**
@@ -682,5 +704,191 @@ final class Path implements JsonSerializable, Serializable {
 	public function isDir() : bool {
 		$this->platform->check();
 		return is_dir($this->toString());
+	}
+
+	/**
+	 * Checks whether the path refers to a symbolic link.
+	 *
+	 * This function returns true even if the symbolic link links to a nonexistent file.
+	 *
+	 * This is an alias to the PHP `is_link` function.
+	 *
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function isLink() : bool {
+		$this->platform->check();
+		return is_link($this->toString());
+	}
+
+	/**
+	 * Creates a directory at the path, optionally creating parent directories.
+	 *
+	 * This method does NOT throw an exception if the directory already exists.
+	 *
+	 * @throws IOException if an IO error occurred while creating the directory and the directory does not exist
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function mkdir(bool $recursive = false, int $mode = 0777) : void {
+		$this->platform->check();
+
+		// Source: https://stackoverflow.com/a/57939677/3990767
+		$path = $this->toString();
+		if(!is_dir($path) && !mkdir($path) && !is_dir($path)) {
+			$error = error_get_last();
+			$message = "Failed to create directory";
+			if(isset($error["message"])) {
+				$message .= ": {$error["message"]}";
+			}
+			throw new IOException($message);
+		}
+	}
+
+	/**
+	 * Scans the contents of this directory.
+	 *
+	 * WARNING: The returned value automatically closes the readdir handle when it is garbage-collected.
+	 * Users are however still strongly advised to manually call the close() method
+	 * if the iterator is not fully traversed.
+	 *
+	 * This does not visit subdirectories.
+	 * Use `scanRecursively()` for a pre-order traversal of recursive contents.
+	 *
+	 * Due to PHP platform restrictions, it is not possible to distinguish between
+	 * end of a directory scan and an error during directory scan
+	 * (this is a TODO fix).
+	 * Thus, the returned iterator does not throw exceptions during iteration.
+	 *
+	 * @return DirectoryGuard
+	 *
+	 * @throws IOException if an IO error occurred while opening the directory.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function scan() : DirectoryGuard {
+		$this->platform->check();
+		return new DirectoryGuard($this);
+	}
+
+	/**
+	 * Scans the contents of this directory *recursively* in preorder traversal.
+	 *
+	 * WARNING: The returned generator automatically closes the readdir handle
+	 * when its underlying DirectoryGuard garbage-collected.
+	 * However if the generator is not fully traversed,
+	 * users are still strongly advised to call `send(true)` on the generator,
+	 * which will abort the generator.
+	 *
+	 * The generator returns a bool, which indicates whether `send(true)` was called on the generator.
+	 *
+	 * Symlinks are skipped by default.
+	 * Pass `$withSymlinks` as `true` to yield symlinks.
+	 *
+	 * No matter `$withSymlinks` is true or not, files under symlinked directories will not be visited.
+	 *
+	 * WARNING: Do not use `iterator_to_array` with this generator,
+	 * because yielded key values are always `null` and would overwrite the array contents.
+	 *
+	 * @return Generator
+	 * @phpstan-return Generator<null, Path, true|null, bool>
+	 * @throws IOException an IOException is thrown with the same conditions as in `Path::scan()`, but only during traversal.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function scanRecursively(bool $withSymlinks = false) : Generator {
+		$scan = $this->scan();
+		foreach($scan as $path) {
+			if($path->isLink()) {
+				if($withSymlinks) {
+					$break = yield null => $path;
+					if($break === true) {
+						$scan->close();
+						return true;
+					}
+				}
+				continue;
+			}
+
+			$break = yield null => $path;
+			if($break === true) {
+				$scan->close();
+				return true;
+			}
+
+			if($path->isDir()) {
+				$break = yield from $path->scanRecursively($withSymlinks);
+				if($break === true) {
+					$scan->close();
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Copies $this to $dest in the intuitive manner.
+	 *
+	 * This is eqiuvalent to the PHP `copy` function if `$this->isFile()`.
+	 *
+	 * If `$this->isLink()`, this will create a symlink with the same destination
+	 * (no matter it exists or not).
+	 *
+	 * If `$this->isDirectory()`, this will copy the directory recursively.
+	 *
+	 * If none of the above is true, a `RuntimeException` is thrown as other file types are unsupported.
+	 *
+	 * @throws IOException if an IO error occurred.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function copy(Path $dest) : void {
+		if($this->isLink()) {
+			$contents = Utils::throwIo(@readlink($this->toString()));
+			/** @var string $contents */
+			Utils::throwIo(@symlink($contents, $dest->toString()));
+			return;
+		}
+
+		if($this->isFile()) {
+			Utils::throwIo(@copy($this->toString(), $dest->toString()));
+			return;
+		}
+
+		if($this->isDir()) {
+			$scan = $this->scan();
+			$dest->mkdir();
+			try {
+				foreach($scan as $name => $path) {
+					$path->copy($dest->join($name));
+				}
+			} finally {
+				$scan->close();
+			}
+			return;
+		}
+
+		throw new RuntimeException("Unsupported file type at {$this->displayUtf8()}");
+	}
+
+	/**
+	 * Deletes $this recursively.
+	 *
+	 * This method does NOT follow symbolic links.
+	 * Use `canonicalize()` if symlink traversal is desired.
+	 * If `$this->isLink()`, only the symbolic link itself is deleted.
+	 *
+	 * @throws IOException if an IO error occurred.
+	 * @throws PlatformMismatchException if this path is not compatible with the current platform.
+	 */
+	public function delete() : void {
+		if($this->isDir()) {
+			$scan = $this->scan();
+			try {
+				foreach($scan as $path) {
+					$path->delete();
+				}
+			} finally {
+				$scan->close();
+			}
+		} else {
+			Utils::throwIo(@unlink($this->toString()));
+		}
 	}
 }
